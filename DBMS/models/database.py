@@ -67,7 +67,7 @@ class Database:
         str: A message indicating success or failure of the operation.
         """
         if name in self.tables:
-            return self.tables[name].insert_record(name,content)
+            return self.tables[name].insert_record(content)
         else:
             return f"Error inserting record. Table {name} doesn't exist"    
                 
