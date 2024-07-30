@@ -1,5 +1,7 @@
+import os
+
 class Table:
-    def __init__(self, name: str):
+    def __init__(self, name: str, db_path : str):
         """
         Initialize a new Table with a given name.
         
@@ -12,6 +14,8 @@ class Table:
         self.primary_key_values = set()
         self.column_datatype = {}
         self.column_constraints = {}
+        self.table_file =os.path.join (db_path,self.name + '.json')
+        self.load_data()
 
     @staticmethod
     def convert_to_type(value: str, dtype: type):
@@ -44,7 +48,24 @@ class Table:
             'float': float,
         }
         return datatype_mapping.get(str_datatype, str)
-
+    
+    def load_data(self):
+        if os.path.exists(self.table_file):
+            file_path = self.table_file
+            with open(file_path, 'r') as file:
+                self.records = json.load(file)
+        else:
+            self.records = []        
+    
+    def save_data(self):
+        try:
+            if os.path.exists(self.table_file):
+                file_path = self.table_file
+                with open(file_path, 'w') as file:
+                   json.dump(self.records,file,indent = 4)
+        except IOError as e:
+            return f"error saving data {e}"    
+    
     def insert_record(self, content: list) -> str:
         """
         Insert a new record into the table.
@@ -57,6 +78,11 @@ class Table:
         """
         if len(content) != len(self.columns):
             return f"Values missing for some columns"
+        
+        # Check for unique primary key
+        primary_key_value = content[0]
+        if primary_key_value in self.primary_key_values:
+            return f"Primary key {primary_key_value} should be unique"
 
         for column, value in zip(self.columns, content):
             datatype = self.column_datatype.get(column)
@@ -78,13 +104,11 @@ class Table:
             if not isinstance(value, datatype):
                 return f"Invalid Data type of column {column}. Expected {datatype.__name__}"
 
-        # Check for unique primary key
-        primary_key_value = content[0]
-        if primary_key_value in self.primary_key_values:
-            return f"Primary key {primary_key_value} should be unique"
+        
 
         self.primary_key_values.add(primary_key_value)
         self.records.append(content)
+        self.save_data()
         return f"Record inserted into the table"
 
     def define_columns(self, columns: list, datatype: list, constraints: dict = None) -> str:
@@ -145,6 +169,12 @@ class Table:
     # Check if the length of the new record matches the number of columns
         if len(new_record) != len(self.columns):
             return f"Values missing for some columns"
+        
+        
+         # Check if the new primary key value already exists (for primary key update)
+        new_primary_key = new_record[0]
+        if new_primary_key != primary_key and new_primary_key in self.primary_key_values:
+            return f"Primary key {new_primary_key} should be unique"
 
         # Validate the new record values and constraints
         for col, value in zip(self.columns, new_record):
@@ -169,10 +199,7 @@ class Table:
             if not isinstance(value, datatype):
                 return f"Invalid Data type for column {col}. Expected {datatype.__name__}"
 
-             # Check if the new primary key value already exists (for primary key update)
-            new_primary_key = new_record[0]
-            if new_primary_key != primary_key and new_primary_key in self.primary_key_values:
-                return f"Primary key {new_primary_key} should be unique"
+            
 
             # Update the primary key set if the primary key is changed
             if new_primary_key != primary_key:
@@ -181,6 +208,7 @@ class Table:
 
             # Update the record
             self.records[record_index] = new_record
+            self.save_data()
             return f"Record with primary key {primary_key} has been updated successfully"
 
 
@@ -198,5 +226,6 @@ class Table:
             if record[0] == primary_key:
                 self.records.remove(record)
                 self.primary_key_values.remove(primary_key)
+                self.save_data()
                 return f"Record with primary key {primary_key} deleted successfully"
         return f"Record with primary key {primary_key} not found"
