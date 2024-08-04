@@ -1,0 +1,30 @@
+{
+    "tables": {
+        "testtable": {
+            "name": "testtable",
+            "columns": [
+                "id",
+                "name",
+                "age"
+            ],
+            "primary_key_value": [
+                "1"
+            ],
+            "datatype": [
+                "int",
+                "str",
+                "int"
+            ],
+            "constraint": {
+                "id": [
+                    "UNIQUE",
+                    "NOT NULL"
+                ],
+                "name": [],
+                "age": [
+                    "NOT NULL"
+                ]
+            }
+        }
+    }
+}

@@ -1,4 +1,5 @@
 import os
+import json
 
 class Table:
     def __init__(self, name: str, db_path : str):
@@ -59,10 +60,9 @@ class Table:
     
     def save_data(self):
         try:
-            if os.path.exists(self.table_file):
-                file_path = self.table_file
-                with open(file_path, 'w') as file:
-                   json.dump(self.records,file,indent = 4)
+            os.makedirs(os.path.dirname(self.table_file),exist_ok=True)
+            with open(self.table_file, 'w') as file:
+                json.dump(self.records,file,indent = 4)
         except IOError as e:
             return f"error saving data {e}"    
     
@@ -77,39 +77,41 @@ class Table:
         str: A message indicating success or failure of the operation.
         """
         if len(content) != len(self.columns):
-            return f"Values missing for some columns"
+            return {"success": False, "message": f"Values missing for some columns"}
         
         # Check for unique primary key
         primary_key_value = content[0]
         if primary_key_value in self.primary_key_values:
-            return f"Primary key {primary_key_value} should be unique"
+            return {"sucess": False, "message": f"Primary key {primary_key_value} should be unique"}
 
         for column, value in zip(self.columns, content):
+            
+
+            # Check for NOT NULL constraint
+            if (value is None or value == '') and 'NOT NULL' in self.column_constraints.get(column, []):
+                return {"success":False,"message":f"Column {column} doesn't allow NULL values"}
+
+            # Check for UNIQUE constraint
+            if 'UNIQUE' in self.column_constraints.get(column, []):
+                if any(record[self.columns.index(column)] == value for record in self.records):
+                    return {"success": False , "message": f"Column {column} only allows unique values"}
+            
+            
             datatype = self.column_datatype.get(column)
             try:
                 value = self.convert_to_type(value, datatype)
             except ValueError as e:
                 return str(e)
-
-            # Check for NOT NULL constraint
-            if (value is None or value == '') and 'NOT NULL' in self.column_constraints.get(column, []):
-                return f"Column {column} doesn't allow NULL values"
-
-            # Check for UNIQUE constraint
-            if 'UNIQUE' in self.column_constraints.get(column, []):
-                if any(record[self.columns.index(column)] == value for record in self.records):
-                    return f"Column {column} only allows unique values"
-
             # Check for Data Type
             if not isinstance(value, datatype):
-                return f"Invalid Data type of column {column}. Expected {datatype.__name__}"
+                return {"success": False , "message": f"Invalid Data type of column {column}. Expected {datatype.__name__}"}
 
         
 
         self.primary_key_values.add(primary_key_value)
         self.records.append(content)
         self.save_data()
-        return f"Record inserted into the table"
+        return {"success": True , "message": f"Record inserted into the table"}
 
     def define_columns(self, columns: list, datatype: list, constraints: dict = None) -> str:
         """

@@ -2,7 +2,7 @@
 
 import sys
 import os
-
+import json
 current_dir = os.path.dirname(os.path.realpath(__file__))
 models_dir = os.path.abspath(os.path.join(current_dir))
 sys.path.append(models_dir)
@@ -42,15 +42,16 @@ class Database:
              
     def load_metadata(self):
         if os.path.exists(self.meta_data_file):
-            with open(self.meta_data_file,'r') as file:
-                metadata=json.load(file)
-                for table_name,schema in metadata['tables'].items():
-                    table = Table(table_name,self.db_path)
-                    table.columns = schema['columns']
-                    table.column_datatype = {col: table.convert_datatype(dtype) for col,dtype in zip(schema['columns'],schema['datatype'])}
-                    table.primary_key_values = set(schema['primary_key_value'])
-                    table.column_constraints = schema['constraint']
-                    self.tables[table_name] = table
+            if os.path.getsize(self.meta_data_file) > 0:
+                with open(self.meta_data_file,'r') as file:
+                    metadata=json.load(file)
+                    for table_name,schema in metadata['tables'].items():
+                        table = Table(table_name,self.db_path)
+                        table.columns = schema['columns']
+                        table.column_datatype = {col: table.convert_datatype(dtype) for col,dtype in zip(schema['columns'],schema['datatype'])}
+                        table.primary_key_values = set(schema['primary_key_value'])
+                        table.column_constraints = schema['constraint']
+                        self.tables[table_name] = table
                     
                          
     
@@ -68,7 +69,7 @@ class Database:
         str: A message indicating success or failure of the operation.
         """
         if name not in self.tables:
-            self.tables[name] = Table(name)
+            self.tables[name] = Table(name,self.db_path)
             self.tables[name].define_columns(columns,datatypes,constraints)
             self.save_metadata()
             return f"Table {name} created"
@@ -89,9 +90,11 @@ class Database:
         str: A message indicating success or failure of the operation.
         """
         if name in self.tables:
-            return self.tables[name].insert_record(content)
+            message = self.tables[name].insert_record(content)
+            self.save_metadata()
+            return message
         else:
-            return f"Error inserting record. Table {name} doesn't exist"    
+            return {"success": False, "message": f"Error inserting record. Table {name} doesn't exist"}    
                 
     def select_table(self,name:str)->list:
         
