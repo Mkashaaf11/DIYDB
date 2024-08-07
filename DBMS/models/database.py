@@ -11,19 +11,20 @@ sys.path.append(models_dir)
 from table import Table
 
 class Database:
-    def __init__(self,db_name: str):
+    def __init__(self,db_name: str,owner:str):
         """
         Initialize a new Database.
         """
         self.tables = {}
         self.db_name = db_name
+        self.owner = owner
         self.db_path = os.path.join('databases',self.db_name)
         self.meta_data_file = os.path.join(self.db_path,'metadata.json')
         self.load_metadata()
     
     
     def save_metadata(self):
-        metadata = {'tables': {}}
+        metadata = {'owner': self.owner,'tables': {}}
         for table_name,table in self.tables.items():
             metadata['tables'][table_name] = {
                 'name' : table_name,
@@ -45,6 +46,7 @@ class Database:
             if os.path.getsize(self.meta_data_file) > 0:
                 with open(self.meta_data_file,'r') as file:
                     metadata=json.load(file)
+                    self.owner = metadata.get('owner')
                     for table_name,schema in metadata['tables'].items():
                         table = Table(table_name,self.db_path)
                         table.columns = schema['columns']

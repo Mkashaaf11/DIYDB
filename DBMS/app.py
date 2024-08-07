@@ -2,10 +2,13 @@
 
 from flask import Flask, request, jsonify
 from models.database import Database
+from functools import wraps
+from auth import Auth
 
 
 app = Flask(__name__)
 databases = {}
+auth = Auth()
 
 @app.route('/')
 def home():
@@ -15,15 +18,57 @@ def home():
     """
     return 'Home Page'
 
+def token_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = request.headers.get('x-access-token')
+        if not token:
+            return jsonify({"error": "Token is missing"}), 401
+        username = auth.verify_token(token)
+        if "Invalid" in username or "expired" in username:
+            return jsonify({"error": username}), 401
+        return f(*args, **kwargs)
+    return decorated
+
+@app.route('/register', methods=['POST'])
+def register():
+    data = request.json
+    username = data.get('username')
+    password = data.get('password')
+    if not username or not password:
+        return jsonify({"error": "Username and password are required"}), 400
+    message = auth.register_user(username, password)
+    if "successfully" in message:
+        return jsonify({"message": message}), 201
+    return jsonify({"error": message}), 400
+
+@app.route('/login', methods=['POST'])
+def login():
+    data = request.json
+    username = data.get('username')
+    password = data.get('password')
+    if not username or not password:
+        return jsonify({"error": "Username and password are required"}), 400
+    token = auth.authenticate_user(username, password)
+    if "Invalid" in token:
+        return jsonify({"error": token}), 401
+    return jsonify({"token": token}), 200
+
 @app.route('/select_database',methods = ['POST'])
+@token_required
 def select_database():
     data =  request.json
     db_name = data.get('db_name')
+    username = auth.verify_token(request.headers.get('x-access-token'))
     
     if not db_name:
         return jsonify({'error': "Database name is required"}),400
+    
+    if db_name in databases and databases[db_name].owner != username:
+        return jsonify({'error': "Access denied"}), 403
+    
     if db_name not in databases.keys():
-        databases[db_name] = Database(db_name)
+        databases[db_name] = Database(db_name,username)
         #return jsonify({'message': f'Database {db_name} is created'}), 201
     
     return jsonify({"message": f"Databse {db_name} selected"}), 200
@@ -31,6 +76,7 @@ def select_database():
 
 
 @app.route('/create_table', methods=['POST'])
+@token_required
 def create_table():
     """
     Route to create a new table.
@@ -54,6 +100,7 @@ def create_table():
 
 
 @app.route('/insert_record', methods=['POST'])
+@token_required
 def insert_record():
     """
     Route to insert a record into a table.
@@ -75,6 +122,7 @@ def insert_record():
         return jsonify({'error': result['message']}), 400
 
 @app.route('/select', methods=['POST'])
+@token_required
 def select():
     """
     Route to select records from a table.
@@ -92,6 +140,7 @@ def select():
     return jsonify({'records': db.select_table(table_name)})
 
 @app.route('/update_record', methods=['PUT'])
+@token_required
 def update_record():
     """
     Route to update a record in a table.
@@ -110,6 +159,7 @@ def update_record():
     return jsonify({'message': db.update(table_name, primary_key, new_record)})
 
 @app.route('/delete', methods=['DELETE'])
+@token_required
 def delete():
     """
     Route to delete a record from a table.
@@ -127,6 +177,7 @@ def delete():
     return jsonify({'message': db.delete(table_name, primary_key)})
 
 @app.route('/drop_table', methods=['POST'])
+@token_required
 def drop():
     """
     Route to delete a record from a table.
