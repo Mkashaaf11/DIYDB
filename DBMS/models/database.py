@@ -7,7 +7,7 @@ current_dir = os.path.dirname(os.path.realpath(__file__))
 models_dir = os.path.abspath(os.path.join(current_dir))
 sys.path.append(models_dir)
 
-# Now import Table from table.py within models
+# import Table from table.py within models
 from table import Table
 
 class Database:
@@ -18,6 +18,7 @@ class Database:
         self.tables = {}
         self.db_name = db_name
         self.owner = owner
+        self.transaction_log = []
         self.db_path = os.path.join('databases',self.db_name)
         self.meta_data_file = os.path.join(self.db_path,'metadata.json')
         self.load_metadata()
@@ -57,6 +58,54 @@ class Database:
                     
                          
     
+    def start_transaction(self):
+        
+        self.transaction_log = []
+        
+    def log_operation(self,operation,table_name,record_id=None,record = None, old_pri_key = None, new_pri_key = None):
+        
+        print(f"Logging operation: {operation} for table: {table_name}, record_id: {record_id}")
+        self.transaction_log.append({
+            
+            "operation":operation,
+            "table_name":table_name,
+            "record_id":record_id,
+            "record":record,
+            "old_pri_key": old_pri_key,
+            "new_pri_key":new_pri_key,
+            
+        })
+        
+    def commit_transaction(self):
+        
+        self.transaction_log = []    
+    
+    def rollback_transaction(self):
+        #print("inside rollback")
+        #print(self.transaction_log)
+        for log in reversed(self.transaction_log):
+            if log['operation']=='insert':
+                #print(self.tables[log['table_name']].records)
+                del self.tables[log['table_name']].records[log['record_id']]
+                #print(self.tables[log['table_name']].records)
+                self.tables[log['table_name']].save_data()
+                
+            elif log['operation'] == 'update':
+                self.tables[log['table_name']].records[log['record_id']] = log['record']
+                if log['old_pri_key'] is not None and log['new_pri_key'] is not None and log['old_pri_key'] != log['new_pri_key']:
+                    self.tables[log['table_name']].primary_key_values.remove(log['new_pri_key'])
+                    self.tables[log['table_name']].primary_key_values.add(log['old_pri_key'])
+                    self.save_metadata()
+                self.tables[log['table_name']].save_data()  
+                 
+            elif log['operation']=='delete':
+                self.tables[log['table_name']].records[log['record_id']] = log['record']
+                self.tables[log['table_name']].primary_key_values.add(log['old_pri_key'])
+                self.save_metadata()
+                self.tables[log['table_name']].save_data()
+                
+        self.transaction_log = []             
+    
     def create_table(self,name:str,columns:list,datatypes:list,constraints:dict = None)->str:
         """
         Create a new table in the database.
@@ -70,13 +119,18 @@ class Database:
         Returns:
         str: A message indicating success or failure of the operation.
         """
-        if name not in self.tables:
-            self.tables[name] = Table(name,self.db_path)
-            self.tables[name].define_columns(columns,datatypes,constraints)
+        if name in self.tables:
+            return {"success": False, "message": f"Table {name} already exists"}
+    
+        self.tables[name] = Table(name, self.db_path)
+        result = self.tables[name].define_columns(columns, datatypes, constraints)
+    
+        if result["success"]:
             self.save_metadata()
-            return f"Table {name} created"
+            return {"success": True, "message": f"Table {name} created successfully"}
         else:
-            return f"Table {name} already exist"
+            return {"success": False, "message": result["message"]}
+        
         
                            
     
@@ -91,12 +145,26 @@ class Database:
         Returns:
         str: A message indicating success or failure of the operation.
         """
-        if name in self.tables:
-            message = self.tables[name].insert_record(content)
-            self.save_metadata()
-            return message
-        else:
-            return {"success": False, "message": f"Error inserting record. Table {name} doesn't exist"}    
+        self.start_transaction()
+        try:
+            if name in self.tables:
+                
+                message = self.tables[name].insert_record(content)
+                if message['success']:
+                    record_id = message['record_id']
+                    self.log_operation('insert', name, record_id=record_id, record=content)
+                    
+                    #print(self.transaction_log)
+                    #raise Exception("Intentional Error: This is a test for rollback functionality")
+                    self.save_metadata()
+                    self.commit_transaction()
+                    
+                    return message
+                else:
+                    return {'success': False, 'message':f'Table {name} doesnt exist'}
+        except Exception as e:
+            self.rollback_transaction()
+            return {"success": False, "message": f"{e}"}    
                 
     def select_table(self,name:str)->list:
         
@@ -127,12 +195,28 @@ class Database:
         Returns:
         str: A message indicating success or failure of the operation.
         """
-        if name in self.tables:
-            message = self.tables[name].update_record(primary_key,new_record)
-            self.save_metadata()
-            return message
-        else:
-            return f"Error Updating record. Table {name} doesn't exist"
+        self.start_transaction()
+        try:
+            
+            if name in self.tables:
+                message = self.tables[name].update_record(primary_key,new_record)
+                if message['success']:
+                    record_id = message['record_id']
+                    original_record = message['original_record']
+                    old_pri_key = message['old_pri_key']
+                    new_pri_key = message['new_pri_key']
+                    self.log_operation('update', name, record_id=record_id, record=original_record, old_pri_key = old_pri_key,new_pri_key= new_pri_key)
+                    
+                    #print(self.transaction_log)
+                    #raise Exception("Intentional Error: This is a test for rollback functionality")
+                    
+                    self.save_metadata()
+                    self.commit_transaction()
+                    
+                    return message
+        except Exception as e:
+            self.rollback_transaction()
+            return {'success': False, 'message': f"Error Updating record {e}" }
         
     def delete(self,name:str,primary_key)->str:
         """
@@ -145,12 +229,26 @@ class Database:
         Returns:
         str: A message indicating success or failure of the operation.
         """
-        if name in self.tables:
-            message = self.tables[name].delete_record(primary_key)
-            self.save_metadata()
-            return message    
-        else:
-            return f"Error deleting record. Table {name} doesn't exist "    
+        self.start_transaction()
+        try:
+            
+            if name in self.tables:
+                message = self.tables[name].delete_record(primary_key)
+                if message['success']:
+                    record_id = message['record_id']
+                    record = message['record']
+                    old_pri_key = message['old_pri_key']
+                    self.log_operation('delete',name,record_id,record,old_pri_key)
+                   
+                    #print(self.transaction_log)
+                    #raise Exception("Intentional Error: This is a test for rollback functionality")
+                    self.save_metadata()
+                    self.commit_transaction()
+                   
+                    return message    
+        except Exception as e:
+            self.rollback_transaction()
+            return {'success': False, 'message':f"Error deleting record {e}. Table {name} doesn't exist "  }   
       
     def drop_table(self, table_name: str) -> str:
         """

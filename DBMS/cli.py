@@ -78,7 +78,7 @@ def select_db(db_name):
     Select a database. If the database doesn't exist, it will be created.
     """
     token = get_auth_token()
-    headers = {'Authorization': f'Bearer {token}'}
+    headers = {'x-access-token': f'Bearer {token}'}
     response = requests.post(f'{BASE_URL}/select_database', json={'db_name': db_name}, headers=headers)
     
     if response.status_code == 201 or response.status_code == 200:
@@ -102,7 +102,7 @@ def create_table(table_name, columns, datatypes, constraints):
         return
 
     token = get_auth_token()
-    headers = {'Authorization': f'Bearer {token}'}
+    headers = {'x-access-token': f'Bearer {token}'}
 
     columns = columns.split(',')
     datatypes = datatypes.split(',')
@@ -140,7 +140,7 @@ def insert_record(table_name, content):
         return
 
     token = get_auth_token()
-    headers = {'Authorization': f'Bearer {token}'}
+    headers = {'x-access-token': f'Bearer {token}'}
 
     content = content.split(',')
     response = requests.post(f'{BASE_URL}/insert_record', json={
@@ -166,7 +166,7 @@ def select(table_name):
         return
 
     token = get_auth_token()
-    headers = {'Authorization': f'Bearer {token}'}
+    headers = {'x-access-token': f'Bearer {token}'}
 
     response = requests.post(f'{BASE_URL}/select', json={
         'db_name': current_db,
@@ -192,7 +192,7 @@ def update_record(table_name, primary_key, new_record):
         return
 
     token = get_auth_token()
-    headers = {'Authorization': f'Bearer {token}'}
+    headers = {'x-access-token': f'Bearer {token}'}
 
     new_record = new_record.split(',')
     response = requests.put(f'{BASE_URL}/update_record', json={
@@ -220,7 +220,7 @@ def delete_record(table_name, primary_key):
         return
 
     token = get_auth_token()
-    headers = {'Authorization': f'Bearer {token}'}
+    headers = {'x-access-token': f'Bearer {token}'}
 
     response = requests.delete(f'{BASE_URL}/delete', json={
         'db_name': current_db,
@@ -245,7 +245,7 @@ def drop_table(table_name):
         return
 
     token = get_auth_token()
-    headers = {'Authorization': f'Bearer {token}'}
+    headers = {'x-acccess-token': f'Bearer {token}'}
 
     response = requests.delete(f'{BASE_URL}/drop_table', json={
         'db_name': current_db,

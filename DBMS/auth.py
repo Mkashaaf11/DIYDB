@@ -16,7 +16,10 @@ class Auth:
         if not os.path.exists(USER_FILE_PATH):
             return []
         with open(USER_FILE_PATH, 'r') as file:
-            return json.load(file).get('users', [])
+            try:
+                return json.load(file).get('users', [])
+            except json.JSONDecodeError:
+                return []
 
     def save_users(self):
         with open(USER_FILE_PATH, 'w') as file:
@@ -30,7 +33,7 @@ class Auth:
     def convert_password(self, password: str, hashed_password: str) -> bool:
         return bcrypt.checkpw(password.encode('utf-8'), hashed_password.encode('utf-8'))
 
-    def register_user(self, username: str, password: str):
+    def register_user(self, username: str, password: str) -> str:
         if any(user['username'] == username for user in self.users):
             return f'{username} already exists'
         hash_password = self.hash_password(password)
@@ -38,7 +41,7 @@ class Auth:
         self.save_users()
         return 'User created successfully'
 
-    def authenticate_user(self, username: str, password: str):
+    def authenticate_user(self, username: str, password: str) -> str:
         for user in self.users:
             if user['username'] == username:
                 if self.convert_password(password, user['password']):
@@ -49,11 +52,13 @@ class Auth:
                     return token
         return 'Invalid credentials'
 
-    def verify_token(self, token):
+    def verify_token(self, token: str)->str:
         try:
-            payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
-            return payload['username']
+            decoded_token = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
+            print("auth.py:",decoded_token['username'])
+            return decoded_token['username']
         except jwt.ExpiredSignatureError:
-            return "Token expired"
+            return "Token has expired"
         except jwt.InvalidTokenError:
             return "Invalid token"
+

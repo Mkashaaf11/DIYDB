@@ -18,17 +18,31 @@ def home():
     """
     return 'Home Page'
 
+def extract_token(headers):
+    token = headers.get('x-access-token', '')
+    if token.startswith('Bearer '):
+        return token[len('Bearer '):]
+    return token
+
 def token_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
-        token = request.headers.get('x-access-token')
-        if not token:
-            return jsonify({"error": "Token is missing"}), 401
-        username = auth.verify_token(token)
-        if "Invalid" in username or "expired" in username:
-            return jsonify({"error": username}), 401
+        auth_header = request.headers.get('x-access-token')
+        print(auth_header)
+        if not auth_header:
+            return jsonify({"error": "Token is missing. Login or register first"}), 401
+        
+        try:
+            token = extract_token(request.headers)
+            username = auth.verify_token(token)
+            if "Invalid" in username or "expired" in username:
+                return jsonify({"error": username}), 401
+        except IndexError:
+            return jsonify({"error": "Token format is incorrect. Ensure 'Bearer <token>' format."}), 401
+        
         return f(*args, **kwargs)
     return decorated
+
 
 @app.route('/register', methods=['POST'])
 def register():
@@ -59,7 +73,9 @@ def login():
 def select_database():
     data =  request.json
     db_name = data.get('db_name')
-    username = auth.verify_token(request.headers.get('x-access-token'))
+    token = extract_token(request.headers)
+    username = auth.verify_token(token)
+    print("app.py:",username)
     
     if not db_name:
         return jsonify({'error': "Database name is required"}),400
